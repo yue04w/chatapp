@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Home</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center h-screen space-y-8">
+    <h1 class="text-4xl font-bold">Welcome to the Chat App</h1>
+    <div class="space-x-4">
+        <a href="{% url 'login' %}" class="bg-green-500 px-6 py-3 rounded-lg text-lg hover:bg-green-600">Login</a>
+        <a href="{% url 'register' %}" class="bg-blue-500 px-6 py-3 rounded-lg text-lg hover:bg-blue-600">Register</a>
+    </div>
+</body>
+</html>
