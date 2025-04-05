@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .message-bubble {
+            max-width: 70%;
+            word-wrap: break-word;
+            margin-bottom: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .messages-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        /* Custom scrollbar for WebKit browsers */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex h-screen overflow-hidden">
+    <!-- Left Sidebar - Navigation -->
+    <aside class="w-16 md:w-20 bg-gray-800 flex flex-col items-center py-6 border-r border-gray-700">
+        <div class="flex flex-col items-center gap-6">
+            <a href="/" class="text-blue-400 hover:text-blue-300 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+            </a>
+            <a href="{% url 'new_chat' %}" class="bg-green-500 p-3 rounded-full text-white hover:bg-green-600 transition-colors" title="New Chat">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+            </a>
+            {% if user.is_authenticated %}
+            <a href="{% url 'profile' %}" class="p-1 mt-auto rounded-full bg-blue-600 hover:bg-blue-700 transition-colors" title="{{ user.username }}">
+                <span class="block h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center uppercase font-bold">
+                    {{ user.username|slice:":1" }}
+                </span>
+            </a>
+            {% endif %}
+        </div>
+    </aside>
+    
+    <!-- Chat List Sidebar -->
+    <aside class="hidden md:block w-72 bg-gray-800 overflow-y-auto custom-scrollbar border-r border-gray-700">
+        <div class="p-4">
+            <h2 class="text-xl font-bold text-blue-400 mb-4">Conversations</h2>
+            
+            <!-- Search Box -->
+            <div class="relative mb-6">
+                <input type="text" placeholder="Search conversations..." 
+                       class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 absolute right-3 top-2.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+            </div>
+            
+            <!-- Chat List -->
+            <div class="space-y-2">
+                {% for chat in user_last_messages %}
+                <a href="{% url 'chat_room' room_name=chat.user.username %}" 
+                   class="flex items-center p-3 rounded-lg hover:bg-gray-700 transition-colors {% if room_name == chat.user.username %}bg-gray-700{% endif %}">
+                    <div class="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center uppercase font-bold text-white">
+                        {{ chat.user.username|slice:":1" }}
+                    </div>
+                    <div class="ml-3 overflow-hidden">
+                        <p class="font-medium truncate">{{ chat.user.username }}</p>
+                        {% if chat.last_message %}
+                        <p class="text-sm text-gray-400 truncate">
+                            {% if chat.last_message.sender == user %}You: {% endif %}
+                            {{ chat.last_message.content }}
+                        </p>
+                        {% endif %}
+                    </div>
+                </a>
+                {% empty %}
+                <p class="text-gray-500 text-center py-4">No conversations yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col">
+        <!-- Chat Header -->
+        <header class="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-800">
+            {% if room_name %}
+            <div class="flex items-center">
+                <button id="toggleSidebar" class="md:hidden mr-3 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <div class="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center uppercase font-bold text-white">
+                    {{ room_name|slice:":1" }}
+                </div>
+                <div class="ml-3">
+                    <h2 class="font-bold">{{ room_name }}</h2>
+                    <p class="text-xs text-gray-400">Online</p>
+                </div>
+            </div>
+            {% else %}
+            <div class="flex items-center">
+                <button id="toggleSidebar" class="md:hidden mr-3 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <h2 class="font-bold">Chat Dashboard</h2>
+            </div>
+            {% endif %}
+            
+            <div class="flex items-center space-x-3">
+                {% if room_name %}
+                <button class="text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+                <button class="text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                </button>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- Messages Area -->
+        <div id="messages" class="flex-1 p-4 overflow-y-auto custom-scrollbar bg-gray-900 messages-container">
+            {% if room_name and chats %}
+                {% for message in chats %}
+                    <div class="flex {% if message.sender == user %}justify-end{% endif %}">
+                        <div class="message-bubble p-3 rounded-lg {% if message.sender == user %}bg-blue-600{% else %}bg-gray-700{% endif %}">
+                            <p>{{ message.content }}</p>
+                            <p class="text-xs text-gray-400 mt-1 text-right">
+                                {{ message.timestamp|date:"g:i A" }}
+                            </p>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% elif not room_name %}
+                <div class="h-full flex items-center justify-center">
+                    <div class="text-center text-gray-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        <h3 class="text-xl font-medium mb-2">Welcome to the Chat App!</h3>
+                        <p>Select a conversation or start a new chat</p>
+                    </div>
+                </div>
+            {% else %}
+                <div class="h-full flex items-center justify-center">
+                    <div class="text-center text-gray-500">
+                        <p>No messages yet. Start a conversation!</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Message Input Area -->
+        {% if room_name %}
+        <form method="POST" action="{% url 'send_message' receiver_username=room_name %}" class="p-4 bg-gray-800 border-t border-gray-700">
+            {% csrf_token %}
+            <div class="flex items-center space-x-2">
+                <input type="text" name="content" id="messageInput" 
+                       class="flex-1 bg-gray-700 text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                       placeholder="Type your message..." autocomplete="off">
+                <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                </button>
+            </div>
+        </form>
+        {% endif %}
+    </main>
+
+    <script>
+        document.getElementById('toggleSidebar').addEventListener('click', function() {
+            const sidebar = document.querySelector('aside.w-72');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('absolute');
+            sidebar.classList.toggle('z-10');
+            sidebar.classList.toggle('h-screen');
+            
+            if (sidebar.classList.contains('absolute')) {
+                sidebar.style.left = '4rem';
+            }
+        });
+
+        {% if room_name %}
+        // WebSocket connection
+        const socket = new WebSocket(`ws://${window.location.host}/ws/chat/{{ room_name }}/`);
+        const messagesContainer = document.getElementById("messages");
+        const user = "{{ user.username }}";
+
+        // Scroll to bottom of messages
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // Initial scroll to bottom
+        scrollToBottom();
+
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // Create message container
+            const messageWrapper = document.createElement("div");
+            messageWrapper.className = `flex ${data.username === user ? 'justify-end' : ''}`;
+            
+            // Create message bubble
+            const messageBubble = document.createElement("div");
+            messageBubble.className = `message-bubble p-3 rounded-lg ${data.username === user ? 'bg-blue-600' : 'bg-gray-700'}`;
+            
+            // Message content
+            const messageContent = document.createElement("p");
+            messageContent.textContent = data.message;
+            messageBubble.appendChild(messageContent);
+            
+            // Message timestamp
+            const timestamp = document.createElement("p");
+            timestamp.className = "text-xs text-gray-400 mt-1 text-right";
+            timestamp.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            messageBubble.appendChild(timestamp);
+            
+            // Add message to DOM
+            messageWrapper.appendChild(messageBubble);
+            messagesContainer.appendChild(messageWrapper);
+            
+            // Scroll to the new message
+            scrollToBottom();
+        };
+
+        socket.onerror = function(error) {
+            console.error("WebSocket Error:", error);
+        };
+
+        // Form submission
+        document.querySelector('form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                // Send via WebSocket
+                socket.send(JSON.stringify({
+                    "message": message,
+                    "username": user
+                }));
+                
+                // Also submit the form for server-side handling
+                this.submit();
+                
+                // Clear input
+                input.value = '';
+            }
+        });
+
+        // Handle Enter key
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.querySelector('form button[type="submit"]').click();
+            }
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
